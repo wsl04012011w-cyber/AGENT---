@@ -703,3 +703,54 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border-top: 1px solid var(--line-soft);
   font-style: italic;
 }
+
+/* ============================================================
+   URL PRESET SELECTOR
+   ============================================================ */
+
+.preset-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.preset-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.preset-btn.active {
+  background: rgba(181, 161, 255, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tunnel-info {
+  border-left: 3px solid var(--accent);
+}
+
+.tunnel-info p {
+  margin: 0 0 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.config-field input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
