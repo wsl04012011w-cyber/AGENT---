@@ -1,33 +1,69 @@
 import { useState, useEffect } from "react";
-import { Settings2, Key, Globe, Check, X, AlertCircle, Loader2 } from "lucide-react";
+import { Settings2, Key, Globe, Check, X, AlertCircle, Loader2, Cloud, Home } from "lucide-react";
 
 // ============================================================
 // CONFIGURAÇÃO FREELLMAPI
 // ============================================================
 
-const DEFAULT_URL = "http://localhost:3001/v1";
+const URL_PRESETS = [
+  { 
+    id: "local", 
+    label: "Localhost", 
+    url: "http://localhost:3001/v1",
+    icon: Home,
+    description: "FreeLLMAPI rodando local"
+  },
+  { 
+    id: "tunnel", 
+    label: "Cloudflare Tunnel", 
+    url: "https://freellmapi.seudominio.com/v1",
+    icon: Cloud,
+    description: "Túnel Cloudflare (produção)"
+  },
+  { 
+    id: "custom", 
+    label: "Custom", 
+    url: "",
+    icon: Globe,
+    description: "URL personalizada"
+  },
+];
 
 export default function ApiConfig({ onConfigSave, onClose }) {
+  const [urlPreset, setUrlPreset] = useState(() => {
+    const saved = localStorage.getItem("freellmapi_url");
+    if (saved?.includes("localhost")) return "local";
+    if (saved?.includes("trycloudflare") || saved?.includes("cfargotunnel")) return "tunnel";
+    return saved ? "custom" : "local";
+  });
+
   const [apiUrl, setApiUrl] = useState(() => 
-    localStorage.getItem("freellmapi_url") || DEFAULT_URL
+    localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1"
   );
   const [apiKey, setApiKey] = useState(() => 
     localStorage.getItem("freellmapi_key") || ""
   );
-  const [testStatus, setTestStatus] = useState("idle"); // idle, testing, success, error
+  const [testStatus, setTestStatus] = useState("idle");
   const [testMessage, setTestMessage] = useState("");
   const [saved, setSaved] = useState(false);
 
-  // Salvar configuração
+  const handlePresetChange = (presetId) => {
+    setUrlPreset(presetId);
+    const preset = URL_PRESETS.find(p => p.id === presetId);
+    if (preset.url) {
+      setApiUrl(preset.url);
+    }
+  };
+
   const handleSave = () => {
     localStorage.setItem("freellmapi_url", apiUrl);
     localStorage.setItem("freellmapi_key", apiKey);
+    localStorage.setItem("freellmapi_preset", urlPreset);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    onConfigSave?.({ url: apiUrl, key: apiKey });
+    onConfigSave?.({ url: apiUrl, key: apiKey, preset: urlPreset });
   };
 
-  // Testar conexão
   const testConnection = async () => {
     setTestStatus("testing");
     setTestMessage("Testando conexão...");
@@ -52,11 +88,10 @@ export default function ApiConfig({ onConfigSave, onClose }) {
       }
     } catch (err) {
       setTestStatus("error");
-      setTestMessage(`❌ Erro: ${err.message}. Verifique se o FreeLLMAPI está rodando.`);
+      setTestMessage(`❌ Erro: ${err.message}. Verifique se o FreeLLMAPI está acessível.`);
     }
   };
 
-  // Teste rápido de chat
   const testChat = async () => {
     setTestStatus("testing");
     setTestMessage("Enviando mensagem de teste...");
@@ -80,9 +115,9 @@ export default function ApiConfig({ onConfigSave, onClose }) {
       if (response.ok) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content || "";
-        const routedVia = response.headers.get("x-routed-via") || "desconhecido";
+        const modelUsed = data.model || "auto";
         setTestStatus("success");
-        setTestMessage(`✅ Resposta: "${content}" | Via: ${routedVia}`);
+        setTestMessage(`✅ Resposta: "${content}" | Modelo: ${modelUsed}`);
       } else {
         const error = await response.json().catch(() => ({}));
         setTestStatus("error");
@@ -108,8 +143,28 @@ export default function ApiConfig({ onConfigSave, onClose }) {
 
       <div className="api-config-content">
         <p className="api-config-desc">
-          Conecte ao seu servidor FreeLLMAPI local para habilitar respostas reais de IA.
+          Conecte ao FreeLLMAPI para habilitar respostas reais de IA.
         </p>
+
+        {/* Seleção de preset */}
+        <div className="config-field">
+          <label>Ambiente</label>
+          <div className="preset-selector">
+            {URL_PRESETS.map((preset) => {
+              const Icon = preset.icon;
+              return (
+                <button
+                  key={preset.id}
+                  className={`preset-btn ${urlPreset === preset.id ? 'active' : ''}`}
+                  onClick={() => handlePresetChange(preset.id)}
+                >
+                  <Icon size={16} />
+                  <span>{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* URL */}
         <div className="config-field">
@@ -121,9 +176,14 @@ export default function ApiConfig({ onConfigSave, onClose }) {
             type="text"
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="http://localhost:3001/v1"
+            placeholder="https://freellmapi.seudominio.com/v1"
+            disabled={urlPreset !== "custom"}
           />
-          <small>Padrão: http://localhost:3001/v1</small>
+          <small>
+            {urlPreset === "local" && "FreeLLMAPI rodando localmente"}
+            {urlPreset === "tunnel" && "Túnel Cloudflare (exposto na internet)"}
+            {urlPreset === "custom" && "Digite sua URL personalizada"}
+          </small>
         </div>
 
         {/* API Key */}
@@ -176,17 +236,20 @@ export default function ApiConfig({ onConfigSave, onClose }) {
           </button>
         </div>
 
-        {/* Info */}
-        <div className="config-info">
-          <h4>🚀 Como usar:</h4>
-          <ol>
-            <li>Instale o FreeLLMAPI: <code>curl -fsSL https://freellmapi.co/install.sh | bash</code></li>
-            <li>Abra o dashboard: <code>http://localhost:3001</code></li>
-            <li>Adicione suas provider keys (Google, Groq, etc)</li>
-            <li>Copie a <strong>Unified API Key</strong> da aba Keys</li>
-            <li>Cole aqui e teste!</li>
-          </ol>
-        </div>
+        {/* Info sobre túnel */}
+        {urlPreset === "tunnel" && (
+          <div className="config-info tunnel-info">
+            <h4>🌐 Cloudflare Tunnel</h4>
+            <p>Para expor seu FreeLLMAPI local:</p>
+            <ol>
+              <li>Instale: <code>winget install cloudflare.cloudflared</code></li>
+              <li>Login: <code>cloudflared login</code></li>
+              <li>Crie: <code>cloudflared tunnel create freellmapi</code></li>
+              <li>Configure DNS no dashboard Cloudflare</li>
+              <li>Rode: <code>cloudflared tunnel run freellmapi</code></li>
+            </ol>
+          </div>
+        )}
 
         {/* Modelos suportados */}
         <div className="config-models">
@@ -209,8 +272,9 @@ export default function ApiConfig({ onConfigSave, onClose }) {
 // Hook para usar a configuração
 export function useApiConfig() {
   const [config, setConfig] = useState(() => ({
-    url: localStorage.getItem("freellmapi_url") || DEFAULT_URL,
+    url: localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1",
     key: localStorage.getItem("freellmapi_key") || "",
+    preset: localStorage.getItem("freellmapi_preset") || "local",
   }));
 
   const isConfigured = () => !!config.key;
@@ -219,6 +283,9 @@ export function useApiConfig() {
     setConfig(newConfig);
     localStorage.setItem("freellmapi_url", newConfig.url);
     localStorage.setItem("freellmapi_key", newConfig.key);
+    if (newConfig.preset) {
+      localStorage.setItem("freellmapi_preset", newConfig.preset);
+    }
   };
 
   return { config, isConfigured, updateConfig };
