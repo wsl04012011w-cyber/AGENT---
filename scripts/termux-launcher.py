@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGENT--- Launcher v4.1
+AGENT--- Launcher v2.0 (FUNCIONANDO)
 FreeLLMAPI + CORS Proxy + Cloudflare Tunnel
 """
 
@@ -15,24 +15,6 @@ import http.server
 import socketserver
 import urllib.request
 import urllib.error
-from pathlib import Path
-
-CONFIG_FILE = Path.home() / ".agent_launcher_config.json"
-DEFAULT_CONFIG = {
-    "freellmapi_path": "~/freellmapi",
-    "proxy_port": 3002,
-    "api_port": 3001,
-}
-
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                saved = json.load(f)
-                return {**DEFAULT_CONFIG, **saved}
-        except:
-            pass
-    return DEFAULT_CONFIG.copy()
 
 class Colors:
     GREEN = '\033[92m'
@@ -48,7 +30,7 @@ def print_banner():
     print(f"""{Colors.PURPLE}{Colors.BOLD}
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║   🤖 AGENT--- LAUNCHER v4.1           ║
+    ║   🤖 AGENT--- LAUNCHER v2.0           ║
     ║                                       ║
     ║   FreeLLMAPI + CORS Proxy + Cloudflare║
     ║                                       ║
@@ -131,63 +113,43 @@ def start_cors_proxy(port=3002):
         print_status(f"Erro no proxy CORS: {e}", "error")
 
 class ProcessManager:
-    def __init__(self, config):
-        self.config = config
+    def __init__(self):
         self.processes = {}
         self.tunnel_url = None
-        self.local_url = f"http://localhost:{config['api_port']}"
-        self.proxy_url = f"http://localhost:{config['proxy_port']}"
+        self.local_url = "http://localhost:3001"
+        self.proxy_url = "http://localhost:3002"
 
     def start_freellmapi(self):
         print_status("Iniciando FreeLLMAPI...", "loading")
         env = os.environ.copy()
         env["HOST"] = "0.0.0.0"
-        freellm_path = os.path.expanduser(self.config["freellmapi_path"])
 
         try:
-            proc = subprocess.Popen(["npm", "run", "dev"], cwd=freellm_path, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            proc = subprocess.Popen(
+                ["npm", "run", "dev"],
+                cwd=os.path.expanduser("~/freellmapi"),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
             self.processes["freellmapi"] = proc
 
-            # Só loga, não bloqueia
-            def log_output():
-                for line in proc.stdout:
-                    if "Server running" in line:
-                        print_status(f"FreeLLMAPI rodando!", "success")
-
-            log_thread = threading.Thread(target=log_output)
-            log_thread.daemon = True
-            log_thread.start()
-
+            for line in proc.stdout:
+                if "Server running" in line or "listening" in line.lower():
+                    print_status(f"FreeLLMAPI rodando em {self.local_url}", "success")
+                    return True
             return True
         except Exception as e:
             print_status(f"Erro ao iniciar FreeLLMAPI: {e}", "error")
             return False
 
-    def wait_for_service(self, url, timeout=60):
-        """Aguarda serviço ficar disponível - mais tolerante"""
-        print_status(f"Aguardando serviço iniciar...", "loading")
-        for i in range(timeout):
-            try:
-                # Tenta qualquer resposta, não só 200
-                req = urllib.request.Request(url, method='GET')
-                try:
-                    urllib.request.urlopen(req, timeout=2)
-                except urllib.error.HTTPError as e:
-                    # Se der 401, 403, 404, etc, significa que o servidor TÁ respondendo
-                    if e.code in [401, 403, 404, 405, 500]:
-                        return True
-                return True
-            except urllib.error.URLError:
-                time.sleep(1)
-            except:
-                time.sleep(1)
-        return False
-
     def start_tunnel(self):
         print_status("Iniciando Cloudflare Tunnel...", "loading")
         try:
             proc = subprocess.Popen(
-                ["cloudflared", "tunnel", "--url", f"http://localhost:{self.config['proxy_port']}"],
+                ["cloudflared", "tunnel", "--url", "http://localhost:3002"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -266,31 +228,27 @@ def check_dependencies():
 
 def main():
     print_banner()
-    config = load_config()
 
     if not check_dependencies():
         sys.exit(1)
 
-    manager = ProcessManager(config)
+    manager = ProcessManager()
 
     try:
         # 1. Proxy CORS
-        proxy_thread = threading.Thread(target=start_cors_proxy, args=(config["proxy_port"],))
+        proxy_thread = threading.Thread(target=start_cors_proxy, args=(3002,))
         proxy_thread.daemon = True
         proxy_thread.start()
-        time.sleep(2)
+        time.sleep(1)
 
         # 2. FreeLLMAPI
-        if not manager.start_freellmapi():
-            print_status("Falha ao iniciar FreeLLMAPI", "error")
-            sys.exit(1)
+        freellm_thread = threading.Thread(target=manager.start_freellmapi)
+        freellm_thread.daemon = True
+        freellm_thread.start()
 
-        # 3. Aguarda FreeLLMAPI (mais tolerante)
-        print_status("Aguardando FreeLLMAPI iniciar (30s)...", "loading")
-        time.sleep(10)  # Espera inicial
-
-        if not manager.wait_for_service(f"http://localhost:{config['api_port']}", timeout=30):
-            print_status("FreeLLMAPI demorou muito, mas vamos tentar mesmo assim...", "warning")
+        # 3. Aguarda (sem health check, só delay)
+        print_status("Aguardando servidor iniciar...", "loading")
+        time.sleep(8)
 
         # 4. Tunnel
         if manager.start_tunnel():
