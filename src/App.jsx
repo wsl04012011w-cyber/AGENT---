@@ -1,9 +1,8 @@
 import { useRef, useState, useEffect } from "react";
 import {
-  AudioLines, Plus, Send, Paperclip, Sparkles, ChevronDown,
+  AudioLines, Plus, Send, Sparkles, ChevronDown,
   X, FileText, Globe, Code2, BrainCircuit, History, PanelLeft,
-  Settings2, MessageSquare, Check, Plug,
-  Maximize2, Minimize2, Brain, Cpu, Zap
+  Check, Plug, Maximize2, Minimize2, Brain, Cpu, Zap
 } from "lucide-react";
 import ApiConfig, { useApiConfig } from "./components/ApiConfig";
 
@@ -14,15 +13,26 @@ const starterPrompts = [
   { icon: Sparkles, label: "Ideias", text: "Me ajuda com ideias." },
 ];
 
-function ThinkingBox({ isThinking }) {
-  if (!isThinking) return null;
+function ThinkingBox({ thinking, isThinking }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!isThinking && !thinking) return null;
+
   return (
     <div className="thinking-box">
-      <div className="thinking-header">
+      <button className="thinking-header" onClick={() => setExpanded(!expanded)}>
         <Brain size={14} />
-        <span>Pensando</span>
-        <div className="thinking-dots"><span></span><span></span><span></span></div>
-      </div>
+        <span>{isThinking ? "Pensando" : "Raciocínio"}</span>
+        {isThinking && (
+          <div className="thinking-dots"><span></span><span></span><span></span></div>
+        )}
+        {!isThinking && thinking && (
+          <span className="thinking-toggle">{expanded ? "▲" : "▼"}</span>
+        )}
+      </button>
+      {expanded && thinking && (
+        <div className="thinking-content">{thinking}</div>
+      )}
     </div>
   );
 }
@@ -48,14 +58,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tokensUsed, setTokensUsed] = useState(0);
-  const [isThinking, setIsThinking] = useState(false);
+  const [thinking, setThinking] = useState({ text: "", isActive: false });
   const messagesEndRef = useRef(null);
   const { config, isConfigured, updateConfig } = useApiConfig();
   const TOKEN_LIMIT = 1800000000;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isThinking]);
+  }, [messages, thinking]);
 
   useEffect(() => {
     const fn = () => setIsFullscreen(!!document.fullscreenElement);
@@ -73,8 +83,7 @@ export default function App() {
     const text = prompt.trim();
     if (!text) return;
 
-    const inputTokens = Math.ceil(text.length / 4);
-    setMessages(prev => [...prev, { role: "user", text, tokens: inputTokens }]);
+    setMessages(prev => [...prev, { role: "user", text }]);
     setPrompt("");
 
     if (!isConfigured()) {
@@ -83,10 +92,9 @@ export default function App() {
     }
 
     setIsLoading(true);
-    setIsThinking(true);
+    setThinking({ text: "", isActive: true });
 
     try {
-      // Tenta streaming primeiro
       const response = await fetch(`${config.url}/chat/completions`, {
         method: "POST",
         headers: {
@@ -98,88 +106,100 @@ export default function App() {
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const contentType = response.headers.get('content-type') || '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      let fullThinking = "";
+      let buffer = "";
+      let finalUsage = null;
 
-      // Verifica se é realmente SSE
-      if (contentType.includes('text/event-stream')) {
-        await handleStreaming(response, inputTokens);
-      } else {
-        // Fallback: resposta completa
-        const data = await response.json();
-        const outputText = data.choices?.[0]?.message?.content || "Sem resposta";
-        const outputTokens = data.usage?.completion_tokens || Math.ceil(outputText.length / 4);
+      // Add empty assistant message
+      setMessages(prev => [...prev, {
+        role: "assistant", text: "", thinking: "", streaming: true, model
+      }]);
 
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          text: outputText,
-          tokens: inputTokens + outputTokens,
-          model: data.model || model
-        }]);
-        setTokensUsed(prev => prev + inputTokens + outputTokens);
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, { role: "assistant", text: `❌ ${err.message}`, isError: true }]);
-    } finally {
-      setIsLoading(false);
-      setIsThinking(false);
-    }
-  };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-  const handleStreaming = async (response, inputTokens) => {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = "";
-    let buffer = "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-    setMessages(prev => [...prev, {
-      role: "assistant", text: "", streaming: true, tokens: inputTokens, model
-    }]);
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
 
-    setIsThinking(false);
+          try {
+            const parsed = JSON.parse(data);
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+            // Pega reasoning (pensamento)
+            const reasoning = parsed.choices?.[0]?.delta?.reasoning || "";
+            if (reasoning) {
+              fullThinking += reasoning;
+              setThinking({ text: fullThinking, isActive: true });
+            }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+            // Pega content (resposta)
+            const content = parsed.choices?.[0]?.delta?.content || "";
+            if (content) {
+              // Se tinha thinking, move pra mensagem
+              if (fullThinking) {
+                setThinking({ text: fullThinking, isActive: false });
+              }
+              fullText += content;
+            }
 
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") continue;
+            // Pega usage do final
+            if (parsed.usage) {
+              finalUsage = parsed.usage;
+            }
 
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta?.content || "";
-          if (delta) {
-            fullText += delta;
-            const outTokens = Math.ceil(fullText.length / 4);
+            // Update message
             setMessages(prev => {
               const updated = [...prev];
               const i = updated.length - 1;
               if (updated[i]?.streaming) {
-                updated[i] = { ...updated[i], text: fullText, tokens: inputTokens + outTokens };
+                updated[i] = { 
+                  ...updated[i], 
+                  text: fullText,
+                  thinking: fullThinking,
+                  tokens: finalUsage?.total_tokens || Math.ceil((text.length + fullText.length) / 4)
+                };
               }
               return updated;
             });
-          }
-        } catch {}
+          } catch {}
+        }
       }
-    }
 
-    // Finaliza
-    const outTokens = Math.ceil(fullText.length / 4);
-    setMessages(prev => {
-      const updated = [...prev];
-      const i = updated.length - 1;
-      if (updated[i]?.streaming) {
-        updated[i] = { ...updated[i], streaming: false, text: fullText || "...", tokens: inputTokens + outTokens };
-      }
-      return updated;
-    });
-    setTokensUsed(prev => prev + inputTokens + outTokens);
+      // Finalize
+      setThinking({ text: fullThinking, isActive: false });
+      setMessages(prev => {
+        const updated = [...prev];
+        const i = updated.length - 1;
+        if (updated[i]?.streaming) {
+          updated[i] = { 
+            ...updated[i], 
+            streaming: false, 
+            text: fullText || "...",
+            thinking: fullThinking,
+            tokens: finalUsage?.total_tokens || Math.ceil((text.length + fullText.length) / 4)
+          };
+        }
+        return updated;
+      });
+
+      setTokensUsed(prev => prev + (finalUsage?.total_tokens || Math.ceil((text.length + fullText.length) / 4)));
+
+    } catch (err) {
+      setThinking({ text: "", isActive: false });
+      setMessages(prev => [...prev, { role: "assistant", text: `❌ ${err.message}`, isError: true }]);
+    } finally {
+      setIsLoading(false);
+      setThinking(prev => ({ ...prev, isActive: false }));
+    }
   };
 
   return (
@@ -260,11 +280,34 @@ export default function App() {
                       {msg.tokens > 0 && <span className="token-badge">{msg.tokens}t</span>}
                       {msg.streaming && <span className="streaming-badge">●</span>}
                     </div>
+
+                    {/* Thinking box dentro da mensagem */}
+                    {msg.thinking && !msg.streaming && (
+                      <details className="msg-thinking">
+                        <summary><Brain size={12} /> Raciocínio</summary>
+                        <p>{msg.thinking}</p>
+                      </details>
+                    )}
+
                     <p className={msg.streaming ? 'streaming-text' : ''}>{msg.text}</p>
                   </div>
                 </div>
               ))}
-              <ThinkingBox isThinking={isThinking} />
+
+              {/* Thinking ativo (durante streaming) */}
+              {thinking.isActive && thinking.text && (
+                <div className="chat-message assistant">
+                  <span className="assistant-avatar"><Brain size={15} /></span>
+                  <div className="message-content thinking-active">
+                    <div className="message-label">
+                      <span>Pensando</span>
+                      <div className="thinking-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <p className="thinking-preview">{thinking.text.slice(-200)}...</p>
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
