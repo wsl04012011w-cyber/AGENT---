@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGENT--- Launcher v3.0
+AGENT--- Launcher v3.1
 FreeLLMAPI + CORS Proxy + Ngrok (URL fixa!)
 """
 
@@ -32,7 +32,6 @@ DEFAULT_CONFIG = {
 }
 
 def load_config():
-    """Carrega configuração salva"""
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, 'r') as f:
@@ -43,11 +42,9 @@ def load_config():
     return DEFAULT_CONFIG.copy()
 
 def save_config(config):
-    """Salva configuração"""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
-# Cores pro terminal
 class Colors:
     GREEN = '\033[92m'
     BLUE = '\033[94m'
@@ -62,7 +59,7 @@ def print_banner():
     print(f"""{Colors.PURPLE}{Colors.BOLD}
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║   🤖 AGENT--- LAUNCHER v3.0           ║
+    ║   🤖 AGENT--- LAUNCHER v3.1           ║
     ║                                       ║
     ║   FreeLLMAPI + CORS Proxy + Ngrok     ║
     ║   URL FIXA - configure uma vez!       ║
@@ -71,24 +68,12 @@ def print_banner():
     {Colors.END}""")
 
 def print_status(msg, status="info"):
-    icons = {
-        "info": "ℹ️",
-        "success": "✅",
-        "error": "❌",
-        "warning": "⚠️",
-        "loading": "⏳"
-    }
-    colors = {
-        "info": Colors.BLUE,
-        "success": Colors.GREEN,
-        "error": Colors.RED,
-        "warning": Colors.YELLOW,
-        "loading": Colors.CYAN
-    }
+    icons = {"info": "ℹ️", "success": "✅", "error": "❌", "warning": "⚠️", "loading": "⏳"}
+    colors = {"info": Colors.BLUE, "success": Colors.GREEN, "error": Colors.RED, "warning": Colors.YELLOW, "loading": Colors.CYAN}
     print(f"{colors.get(status, Colors.BLUE)}{icons.get(status, 'ℹ️')} {msg}{Colors.END}")
 
 # ============================================================
-# CORS PROXY HANDLER
+# CORS PROXY
 # ============================================================
 
 class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -128,33 +113,16 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length) if content_length > 0 else None
-
             target_url = f"http://{self.target_host}:{self.target_port}{self.path}"
 
-            req = urllib.request.Request(
-                target_url,
-                data=body,
-                method=method,
-                headers={
-                    key: value for key, value in self.headers.items()
-                    if key.lower() not in ['host', 'connection', 'origin']
-                }
-            )
+            req = urllib.request.Request(target_url, data=body, method=method, headers={k: v for k, v in self.headers.items() if k.lower() not in ['host', 'connection', 'origin']})
 
             with urllib.request.urlopen(req, timeout=30) as response:
                 self.send_response(response.status)
                 self._set_cors_headers()
-
                 for header, value in response.headers.items():
-                    if header.lower() not in [
-                        'access-control-allow-origin',
-                        'access-control-allow-methods',
-                        'access-control-allow-headers',
-                        'transfer-encoding',
-                        'connection'
-                    ]:
+                    if header.lower() not in ['access-control-allow-origin', 'access-control-allow-methods', 'access-control-allow-headers', 'transfer-encoding', 'connection']:
                         self.send_header(header, value)
-
                 self.end_headers()
                 self.wfile.write(response.read())
 
@@ -163,7 +131,6 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             self._set_cors_headers()
             self.end_headers()
             self.wfile.write(e.read())
-
         except Exception as e:
             self.send_response(500)
             self._set_cors_headers()
@@ -172,7 +139,6 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
 def start_cors_proxy(port=3002):
-    """Inicia o proxy CORS"""
     try:
         with socketserver.TCPServer(("", port), CORSProxyHandler) as httpd:
             print_status(f"Proxy CORS rodando em http://localhost:{port}", "success")
@@ -193,82 +159,57 @@ class ProcessManager:
         self.proxy_url = f"http://localhost:{config['proxy_port']}"
 
     def start_freellmapi(self):
-        """Inicia o servidor FreeLLMAPI"""
         print_status("Iniciando FreeLLMAPI...", "loading")
-
         env = os.environ.copy()
         env["HOST"] = "0.0.0.0"
-
         freellm_path = os.path.expanduser(self.config["freellmapi_path"])
 
         try:
-            proc = subprocess.Popen(
-                ["npm", "run", "dev"],
-                cwd=freellm_path,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
+            proc = subprocess.Popen(["npm", "run", "dev"], cwd=freellm_path, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             self.processes["freellmapi"] = proc
 
             for line in proc.stdout:
                 if "Server running" in line or "listening" in line.lower():
                     print_status(f"FreeLLMAPI rodando em {self.local_url}", "success")
                     return True
-
             return True
-
         except Exception as e:
             print_status(f"Erro ao iniciar FreeLLMAPI: {e}", "error")
             return False
 
+    def wait_for_service(self, url, timeout=30):
+        """Aguarda serviço ficar disponível"""
+        print_status(f"Aguardando {url}...", "loading")
+        for i in range(timeout):
+            try:
+                urllib.request.urlopen(url, timeout=2)
+                return True
+            except:
+                time.sleep(1)
+        return False
+
     def setup_ngrok(self):
-        """Configura o ngrok com o token"""
         token = self.config.get("ngrok_token", "")
         if not token:
             return False
-
         try:
-            # Configura o token
-            subprocess.run(
-                ["ngrok", "config", "add-authtoken", token],
-                capture_output=True,
-                check=True
-            )
+            subprocess.run(["ngrok", "config", "add-authtoken", token], capture_output=True, check=True)
             return True
         except:
             return False
 
     def start_ngrok(self):
-        """Inicia o ngrok com domínio fixo"""
         print_status("Iniciando Ngrok...", "loading")
-
         try:
-            proc = subprocess.Popen(
-                [
-                    "ngrok", "http", 
-                    f"--url={self.config['ngrok_domain']}",
-                    f"{self.config['proxy_port']}"
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
+            proc = subprocess.Popen(["ngrok", "http", f"--url={self.config['ngrok_domain']}", f"{self.config['proxy_port']}"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             self.processes["ngrok"] = proc
-
-            # Aguarda ngrok iniciar
-            time.sleep(3)
+            time.sleep(5)
             return True
-
         except Exception as e:
             print_status(f"Erro ao iniciar ngrok: {e}", "error")
             return False
 
     def print_summary(self):
-        """Imprime resumo das URLs"""
         domain = self.config['ngrok_domain']
         print(f"""
 {Colors.GREEN}{Colors.BOLD}╔═══════════════════════════════════════════════════════════════╗
@@ -281,7 +222,7 @@ class ProcessManager:
 {Colors.CYAN}🛡️  PROXY CORS (local):{Colors.END}
    {Colors.BOLD}{self.proxy_url}{Colors.END}
 
-{Colors.PURPLE}🌐 NGROK (URL FIXA - use sempre esta!):{Colors.END}
+{Colors.PURPLE}🌐 NGROK (URL FIXA):{Colors.END}
    {Colors.BOLD}{self.ngrok_url}{Colors.END}
    {Colors.GREEN}└─ ✅ URL fixa, não muda nunca!{Colors.END}
 
@@ -295,13 +236,11 @@ class ProcessManager:
 {Colors.YELLOW}⚠️  IMPORTANTE:{Colors.END}
    • Mantenha este terminal aberto
    • Para parar: Ctrl+C
-   • URL fixa: {domain}
 
 {Colors.CYAN}💡 Fluxo: Navegador → Ngrok → Proxy CORS → FreeLLMAPI{Colors.END}
 """)
 
     def cleanup(self):
-        """Encerra todos os processos"""
         print_status("Encerrando processos...", "warning")
         for name, proc in self.processes.items():
             try:
@@ -311,101 +250,72 @@ class ProcessManager:
                 pass
 
 def check_dependencies():
-    """Verifica dependências"""
-    deps = {
-        "npm": "Node.js/npm",
-        "ngrok": "Ngrok (pkg install ngrok)"
-    }
-
+    deps = {"npm": "Node.js/npm", "ngrok": "Ngrok"}
     missing = []
     for cmd, name in deps.items():
         try:
             subprocess.run([cmd, "--version"], capture_output=True, check=True)
             print_status(f"{name} encontrado", "success")
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except:
             missing.append(name)
             print_status(f"{name} NÃO encontrado", "error")
-
     if missing:
-        print(f"\n{Colors.RED}❌ Dependências faltando:{Colors.END}")
+        print(f"\n{Colors.RED}❌ Instale:{Colors.END}")
         for dep in missing:
             print(f"   • {dep}")
-        print(f"\n{Colors.YELLOW}💡 Instale com:{Colors.END}")
-        print(f"   pkg install ngrok")
-        print(f"   pkg install nodejs")
         return False
-
     return True
 
 def setup_wizard(config):
-    """Wizard de configuração inicial"""
-    print(f"\n{Colors.CYAN}{Colors.BOLD}🔧 Configuração Inicial{Colors.END}\n")
-
-    # Ngrok token
     if not config.get("ngrok_token"):
-        print(f"{Colors.YELLOW}📝 Para usar Ngrok com URL fixa, você precisa:{Colors.END}")
-        print(f"   1. Criar conta em: https://dashboard.ngrok.com/signup")
-        print(f"   2. Copiar o token em: https://dashboard.ngrok.com/get-started/your-authtoken")
-        print(f"   3. Reservar domínio em: https://dashboard.ngrok.com/cloud-edge/domains")
-        print()
+        print(f"\n{Colors.CYAN}{Colors.BOLD}🔧 Configuração Inicial{Colors.END}\n")
+        print(f"{Colors.YELLOW}📝 Pegue seu token em: https://dashboard.ngrok.com/get-started/your-authtoken{Colors.END}\n")
 
         token = input(f"{Colors.CYAN}Cole seu Ngrok Authtoken: {Colors.END}").strip()
         if token:
             config["ngrok_token"] = token
-            print_status("Token salvo!", "success")
 
-        domain = input(f"{Colors.CYAN}Cole seu domínio Ngrok (ex: seu-dominio.ngrok-free.dev): {Colors.END}").strip()
+        domain = input(f"{Colors.CYAN}Cole seu domínio Ngrok [{config['ngrok_domain']}]: {Colors.END}").strip()
         if domain:
             config["ngrok_domain"] = domain
-            print_status("Domínio salvo!", "success")
 
         save_config(config)
-        print(f"\n{Colors.GREEN}✅ Configuração salva em {CONFIG_FILE}{Colors.END}\n")
-    else:
-        print_status(f"Token Ngrok já configurado", "success")
-        print_status(f"Domínio: {config['ngrok_domain']}", "info")
+        print(f"\n{Colors.GREEN}✅ Configuração salva!{Colors.END}\n")
 
 def main():
     print_banner()
-
-    # Carrega configuração
     config = load_config()
 
-    # Verifica dependências
     if not check_dependencies():
         sys.exit(1)
 
-    # Setup inicial se necessário
     setup_wizard(config)
-
     manager = ProcessManager(config)
 
     try:
-        # Configura ngrok
-        if config.get("ngrok_token"):
-            print_status("Configurando Ngrok...", "loading")
-            manager.setup_ngrok()
-
-        # Inicia proxy CORS
-        proxy_thread = threading.Thread(
-            target=start_cors_proxy, 
-            args=(config["proxy_port"],)
-        )
+        # 1. Inicia proxy CORS
+        proxy_thread = threading.Thread(target=start_cors_proxy, args=(config["proxy_port"],))
         proxy_thread.daemon = True
         proxy_thread.start()
-        time.sleep(1)
+        time.sleep(2)
 
-        # Inicia FreeLLMAPI
+        # 2. Inicia FreeLLMAPI
         freellm_thread = threading.Thread(target=manager.start_freellmapi)
         freellm_thread.daemon = True
         freellm_thread.start()
 
-        print_status("Aguardando servidor iniciar...", "loading")
-        time.sleep(5)
+        # 3. Aguarda FreeLLMAPI ficar pronto
+        if not manager.wait_for_service(f"http://localhost:{config['api_port']}", timeout=30):
+            print_status("FreeLLMAPI não respondeu. Verifique se está instalado.", "error")
+            manager.cleanup()
+            sys.exit(1)
 
-        # Inicia Ngrok
+        # 4. Configura e inicia Ngrok
+        if config.get("ngrok_token"):
+            manager.setup_ngrok()
+
         if manager.start_ngrok():
-            time.sleep(2)
+            time.sleep(3)
             manager.print_summary()
 
             print_status("Pressione Ctrl+C para encerrar", "info")
@@ -416,7 +326,7 @@ def main():
             manager.cleanup()
 
     except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}👋 Encerrando AGENT--- Launcher...{Colors.END}")
+        print(f"\n{Colors.YELLOW}👋 Encerrando...{Colors.END}")
         manager.cleanup()
         print_status("Até logo!", "success")
 
