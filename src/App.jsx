@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  BrainCircuit,
+  Code2,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
