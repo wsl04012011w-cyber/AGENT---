@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import {
   AudioLines, Plus, Send, Sparkles, ChevronDown,
-  X, FileText, Globe, Code2, History, PanelLeft,
+  X, FileText, Globe, Code2, History, PanelLeft, MessageSquare,
   Check, Plug, Maximize2, Minimize2, Brain, Cpu, Zap
 } from "lucide-react";
 import ApiConfig, { useApiConfig } from "./components/ApiConfig";
