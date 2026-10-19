@@ -16,7 +16,7 @@ const URL_PRESETS = [
   { 
     id: "tunnel", 
     label: "Cloudflare Tunnel", 
-    url: "https://freellmapi.seudominio.com/v1",
+    url: "",
     icon: Cloud,
     description: "Túnel Cloudflare (produção)"
   },
@@ -31,10 +31,14 @@ const URL_PRESETS = [
 
 export default function ApiConfig({ onConfigSave, onClose }) {
   const [urlPreset, setUrlPreset] = useState(() => {
-    const saved = localStorage.getItem("freellmapi_url");
-    if (saved?.includes("localhost")) return "local";
-    if (saved?.includes("trycloudflare") || saved?.includes("cfargotunnel")) return "tunnel";
-    return saved ? "custom" : "local";
+    const saved = localStorage.getItem("freellmapi_url") || "";
+    const savedPreset = localStorage.getItem("freellmapi_preset") || "";
+
+    if (savedPreset) return savedPreset;
+    if (saved.includes("localhost")) return "local";
+    if (saved.includes("trycloudflare") || saved.includes("cfargotunnel") || saved.includes("cloudflare")) return "tunnel";
+    if (saved) return "custom";
+    return "local";
   });
 
   const [apiUrl, setApiUrl] = useState(() => 
@@ -50,8 +54,20 @@ export default function ApiConfig({ onConfigSave, onClose }) {
   const handlePresetChange = (presetId) => {
     setUrlPreset(presetId);
     const preset = URL_PRESETS.find(p => p.id === presetId);
-    if (preset.url) {
-      setApiUrl(preset.url);
+
+    // Só preenche automaticamente para localhost
+    if (presetId === "local") {
+      setApiUrl("http://localhost:3001/v1");
+    } else if (presetId === "tunnel" || presetId === "custom") {
+      // Mantém a URL salva ou deixa vazio para digitar
+      const saved = localStorage.getItem("freellmapi_url");
+      if (presetId === "tunnel" && saved && !saved.includes("localhost")) {
+        setApiUrl(saved);
+      } else if (presetId === "custom" && saved) {
+        setApiUrl(saved);
+      } else {
+        setApiUrl("");
+      }
     }
   };
 
@@ -65,6 +81,12 @@ export default function ApiConfig({ onConfigSave, onClose }) {
   };
 
   const testConnection = async () => {
+    if (!apiUrl || !apiKey) {
+      setTestStatus("error");
+      setTestMessage("❌ Preencha URL e API Key primeiro!");
+      return;
+    }
+
     setTestStatus("testing");
     setTestMessage("Testando conexão...");
 
@@ -93,6 +115,12 @@ export default function ApiConfig({ onConfigSave, onClose }) {
   };
 
   const testChat = async () => {
+    if (!apiUrl || !apiKey) {
+      setTestStatus("error");
+      setTestMessage("❌ Preencha URL e API Key primeiro!");
+      return;
+    }
+
     setTestStatus("testing");
     setTestMessage("Enviando mensagem de teste...");
 
@@ -176,12 +204,17 @@ export default function ApiConfig({ onConfigSave, onClose }) {
             type="text"
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="https://freellmapi.seudominio.com/v1"
-            disabled={urlPreset !== "custom"}
+            placeholder={
+              urlPreset === "local" 
+                ? "http://localhost:3001/v1"
+                : urlPreset === "tunnel"
+                ? "https://seu-tunnel.trycloudflare.com/v1"
+                : "https://sua-url.com/v1"
+            }
           />
           <small>
             {urlPreset === "local" && "FreeLLMAPI rodando localmente"}
-            {urlPreset === "tunnel" && "Túnel Cloudflare (exposto na internet)"}
+            {urlPreset === "tunnel" && "Cole a URL do seu túnel Cloudflare (ex: https://xxx.trycloudflare.com/v1)"}
             {urlPreset === "custom" && "Digite sua URL personalizada"}
           </small>
         </div>
@@ -216,14 +249,14 @@ export default function ApiConfig({ onConfigSave, onClose }) {
           <button 
             className="btn-secondary" 
             onClick={testConnection}
-            disabled={testStatus === "testing" || !apiUrl || !apiKey}
+            disabled={testStatus === "testing"}
           >
             Testar Conexão
           </button>
           <button 
             className="btn-secondary" 
             onClick={testChat}
-            disabled={testStatus === "testing" || !apiUrl || !apiKey}
+            disabled={testStatus === "testing"}
           >
             Testar Chat
           </button>
@@ -244,9 +277,9 @@ export default function ApiConfig({ onConfigSave, onClose }) {
             <ol>
               <li>Instale: <code>winget install cloudflare.cloudflared</code></li>
               <li>Login: <code>cloudflared login</code></li>
-              <li>Crie: <code>cloudflared tunnel create freellmapi</code></li>
-              <li>Configure DNS no dashboard Cloudflare</li>
-              <li>Rode: <code>cloudflared tunnel run freellmapi</code></li>
+              <li>Rápido (sem login): <code>cloudflared tunnel --url http://localhost:3001</code></li>
+              <li>Copie a URL gerada (ex: https://xxx.trycloudflare.com)</li>
+              <li>Cole acima com <code>/v1</code> no final</li>
             </ol>
           </div>
         )}
