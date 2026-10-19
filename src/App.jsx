@@ -122,7 +122,6 @@ export default function App() {
             </div>
           </form>
           <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={(e) => { setFiles((current) => [...current, ...Array.from(e.target.files || [])]); e.target.value = ""; }} />
-          <p className="composer-disclaimer">AGENT--- ainda está em protótipo. As respostas não usam um modelo de IA real.</p>
         </div>
       </main>
     </div>
