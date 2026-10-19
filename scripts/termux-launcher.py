@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGENT--- Launcher v4.0
+AGENT--- Launcher v4.1
 FreeLLMAPI + CORS Proxy + Cloudflare Tunnel
 """
 
@@ -34,10 +34,6 @@ def load_config():
             pass
     return DEFAULT_CONFIG.copy()
 
-def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
-
 class Colors:
     GREEN = '\033[92m'
     BLUE = '\033[94m'
@@ -52,7 +48,7 @@ def print_banner():
     print(f"""{Colors.PURPLE}{Colors.BOLD}
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║   🤖 AGENT--- LAUNCHER v4.0           ║
+    ║   🤖 AGENT--- LAUNCHER v4.1           ║
     ║                                       ║
     ║   FreeLLMAPI + CORS Proxy + Cloudflare║
     ║                                       ║
@@ -152,21 +148,37 @@ class ProcessManager:
             proc = subprocess.Popen(["npm", "run", "dev"], cwd=freellm_path, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             self.processes["freellmapi"] = proc
 
-            for line in proc.stdout:
-                if "Server running" in line or "listening" in line.lower():
-                    print_status(f"FreeLLMAPI rodando em {self.local_url}", "success")
-                    return True
+            # Só loga, não bloqueia
+            def log_output():
+                for line in proc.stdout:
+                    if "Server running" in line:
+                        print_status(f"FreeLLMAPI rodando!", "success")
+
+            log_thread = threading.Thread(target=log_output)
+            log_thread.daemon = True
+            log_thread.start()
+
             return True
         except Exception as e:
             print_status(f"Erro ao iniciar FreeLLMAPI: {e}", "error")
             return False
 
-    def wait_for_service(self, url, timeout=30):
-        print_status(f"Aguardando {url}...", "loading")
+    def wait_for_service(self, url, timeout=60):
+        """Aguarda serviço ficar disponível - mais tolerante"""
+        print_status(f"Aguardando serviço iniciar...", "loading")
         for i in range(timeout):
             try:
-                urllib.request.urlopen(url, timeout=2)
+                # Tenta qualquer resposta, não só 200
+                req = urllib.request.Request(url, method='GET')
+                try:
+                    urllib.request.urlopen(req, timeout=2)
+                except urllib.error.HTTPError as e:
+                    # Se der 401, 403, 404, etc, significa que o servidor TÁ respondendo
+                    if e.code in [401, 403, 404, 405, 500]:
+                        return True
                 return True
+            except urllib.error.URLError:
+                time.sleep(1)
             except:
                 time.sleep(1)
         return False
@@ -269,15 +281,16 @@ def main():
         time.sleep(2)
 
         # 2. FreeLLMAPI
-        freellm_thread = threading.Thread(target=manager.start_freellmapi)
-        freellm_thread.daemon = True
-        freellm_thread.start()
-
-        # 3. Aguarda FreeLLMAPI
-        if not manager.wait_for_service(f"http://localhost:{config['api_port']}", timeout=30):
-            print_status("FreeLLMAPI não respondeu!", "error")
-            manager.cleanup()
+        if not manager.start_freellmapi():
+            print_status("Falha ao iniciar FreeLLMAPI", "error")
             sys.exit(1)
+
+        # 3. Aguarda FreeLLMAPI (mais tolerante)
+        print_status("Aguardando FreeLLMAPI iniciar (30s)...", "loading")
+        time.sleep(10)  # Espera inicial
+
+        if not manager.wait_for_service(f"http://localhost:{config['api_port']}", timeout=30):
+            print_status("FreeLLMAPI demorou muito, mas vamos tentar mesmo assim...", "warning")
 
         # 4. Tunnel
         if manager.start_tunnel():
