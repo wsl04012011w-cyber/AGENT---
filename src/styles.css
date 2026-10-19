@@ -754,3 +754,35 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   URL PREVIEW
+   ============================================================ */
+
+.url-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(181, 161, 255, 0.08);
+  border: 1px solid rgba(181, 161, 255, 0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.url-preview svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.url-preview code {
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  word-break: break-all;
+}
