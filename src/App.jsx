@@ -1,427 +1,130 @@
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  BrainCircuit,
-  Code2,
-  ArrowDownRight,
-  ArrowRight,
-  ArrowUpRight,
-  AudioLines,
-  Bell,
-  Check,
-  ChevronDown,
-  CircleHelp,
-  Command,
-  Cpu,
-  FileCode2,
-  Github,
-  Layers3,
-  Menu,
-  MessageSquare,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Send,
-  Settings2,
-  Sparkles,
-  WandSparkles,
-  X,
-  Zap,
+  AudioLines, Plus, Send, Paperclip, Wrench, Sparkles, ChevronDown,
+  X, FileText, Globe, Code2, BrainCircuit, Image, History, PanelLeft,
+  Settings2, MessageSquare, Mic, Check, SlidersHorizontal
 } from "lucide-react";
-import {
-  initialRuns,
-  navigation,
-  providers,
-  samplePrompts,
-  tools,
-} from "./data/mockData.js";
 
-const pageCopy = {
-  overview: {
-    eyebrow: "WORKSPACE / 001",
-    title: "Vamos construir algo inteligente.",
-    subtitle: "Um espaço para transformar ideias em tarefas, ferramentas e experiências com IA.",
-  },
-  chat: {
-    eyebrow: "WORKSPACE / CHAT",
-    title: "Converse com o workspace.",
-    subtitle: "Este chat é demonstrativo por enquanto. Nenhum modelo externo está conectado.",
-  },
-  tools: {
-    eyebrow: "WORKSPACE / TOOLS",
-    title: "Ferramentas à disposição.",
-    subtitle: "O catálogo inicial do que o agente poderá usar quando começarmos as integrações.",
-  },
-  runs: {
-    eyebrow: "WORKSPACE / ACTIVITY",
-    title: "Tudo o que acontece, registrado.",
-    subtitle: "Histórico local de demonstração para futuras execuções do agente.",
-  },
-  architecture: {
-    eyebrow: "WORKSPACE / SYSTEM",
-    title: "Peças pequenas. Um sistema só.",
-    subtitle: "Uma arquitetura inicial que pode evoluir sem amarrar a interface a um provedor específico.",
-  },
-  settings: {
-    eyebrow: "WORKSPACE / SETTINGS",
-    title: "Configurações do projeto.",
-    subtitle: "As integrações reais serão configuradas numa etapa posterior, com segredos mantidos fora do frontend.",
-  },
-};
+const starterPrompts = [
+  { icon: Code2, label: "Me ajuda com código", text: "Me ajuda a resolver um problema de código." },
+  { icon: Globe, label: "Pesquisar na web", text: "Quero pesquisar um assunto e entender as fontes." },
+  { icon: FileText, label: "Trabalhar com arquivos", text: "Me ajuda a analisar um arquivo." },
+  { icon: Sparkles, label: "Criar uma ideia", text: "Me ajuda a transformar uma ideia em um plano." },
+];
 
-function ProviderMark({ provider }) {
-  return <span className={`provider-mark ${provider.color}`}>{provider.short}</span>;
-}
-
-function SectionHeading({ eyebrow, title, action }) {
-  return (
-    <div className="section-heading">
-      <div>
-        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h2>{title}</h2>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function ToolCard({ tool, onRun, compact = false }) {
-  const Icon = tool.icon;
-  return (
-    <article className={`tool-card ${compact ? "compact" : ""}`}>
-      <div className="tool-card-top">
-        <span className="tool-icon"><Icon size={18} strokeWidth={1.8} /></span>
-        <span className="pill muted"><span className="tiny-dot" />{tool.state}</span>
-      </div>
-      <div className="tool-card-copy">
-        <span className="tool-category">{tool.category}</span>
-        <h3>{tool.name}</h3>
-        <p>{tool.description}</p>
-      </div>
-      <button className="text-action" onClick={() => onRun(tool)} type="button">
-        Testar demonstração <ArrowUpRight size={14} />
-      </button>
-    </article>
-  );
-}
-
-function EmptyChat({ onPrompt }) {
-  return (
-    <div className="empty-chat">
-      <div className="empty-orb"><Sparkles size={24} /></div>
-      <span className="eyebrow">UM NOVO COMEÇO</span>
-      <h2>Qual é a próxima ideia?</h2>
-      <p>Escreva uma tarefa ou comece com uma sugestão. As respostas nesta versão são simuladas.</p>
-      <div className="suggestion-list">
-        {samplePrompts.map((item) => (
-          <button key={item} onClick={() => onPrompt(item)} className="suggestion" type="button">
-            <span>{item}</span><ArrowUpRight size={15} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ChatComposer({ value, onChange, onSubmit, compact = false }) {
-  return (
-    <form className={`composer ${compact ? "composer-compact" : ""}`} onSubmit={onSubmit}>
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            onSubmit(event);
-          }
-        }}
-        placeholder="Descreva uma tarefa, uma ideia ou um problema..."
-        rows={compact ? 2 : 3}
-        aria-label="Mensagem para o workspace"
-      />
-      <div className="composer-bottom">
-        <div className="composer-hints">
-          <span className="hint-chip"><Command size={12} /> Enter para enviar</span>
-          <span className="draft-label">Modo protótipo</span>
-        </div>
-        <button className="send-button" type="submit" disabled={!value.trim()} aria-label="Enviar mensagem">
-          <Send size={15} /><span>Enviar</span>
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function ArchitectureView() {
-  const stages = [
-    { n: "01", title: "Interface", detail: "React + Vite", note: "O workspace que a pessoa usa", icon: Layers3 },
-    { n: "02", title: "Camada de aplicação", detail: "A definir", note: "Estado, tarefas e permissões", icon: Settings2 },
-    { n: "03", title: "Ferramentas", detail: "A definir", note: "Pesquisa, arquivos e execução", icon: WandSparkles },
-    { n: "04", title: "Modelo de linguagem", detail: "Qwen 27B · planejado", note: "Inferência via serviço externo", icon: Cpu },
-  ];
-  return (
-    <div className="architecture-layout">
-      <section className="panel architecture-panel">
-        <SectionHeading eyebrow="MAPA DO SISTEMA" title="Fluxo proposto" />
-        <div className="architecture-flow">
-          {stages.map((stage, index) => {
-            const Icon = stage.icon;
-            return (
-              <div className="flow-part" key={stage.n}>
-                <div className="flow-card">
-                  <span className="flow-number">{stage.n}</span>
-                  <span className="flow-icon"><Icon size={19} /></span>
-                  <div><h3>{stage.title}</h3><span className="flow-detail">{stage.detail}</span><p>{stage.note}</p></div>
-                  <span className="flow-state">Planejado</span>
-                </div>
-                {index < stages.length - 1 && <div className="flow-connector"><ArrowDownRight size={17} /></div>}
-              </div>
-            );
-          })}
-        </div>
-        <p className="notice"><CircleHelp size={16} /> Este mapa é apenas uma hipótese inicial. Vamos ajustar a arquitetura antes de conectar serviços reais.</p>
-      </section>
-      <aside className="panel architecture-aside">
-        <span className="eyebrow">PRINCÍPIOS</span>
-        <div className="principle"><span className="principle-index">A</span><div><h3>Separação de responsabilidades</h3><p>Interface, lógica de negócio e integrações em camadas distintas.</p></div></div>
-        <div className="principle"><span className="principle-index">B</span><div><h3>Provedores desacoplados</h3><p>Evitar espalhar detalhes de um modelo específico pela aplicação.</p></div></div>
-        <div className="principle"><span className="principle-index">C</span><div><h3>Segredos no servidor</h3><p>Chaves de API nunca devem ser incluídas no bundle do navegador.</p></div></div>
-      </aside>
-    </div>
-  );
-}
+const toolOptions = [
+  { icon: Globe, title: "Pesquisa na web", detail: "Encontrar informações e fontes" },
+  { icon: Code2, title: "Ajuda com código", detail: "Analisar e escrever código" },
+  { icon: FileText, title: "Análise de arquivos", detail: "Trabalhar com documentos enviados" },
+];
+const skillOptions = [
+  { icon: BrainCircuit, title: "Planejamento", detail: "Dividir tarefas em etapas" },
+  { icon: Sparkles, title: "Escrita", detail: "Criar, revisar e melhorar textos" },
+  { icon: SlidersHorizontal, title: "Análise crítica", detail: "Comparar opções e encontrar problemas" },
+];
 
 export default function App() {
-  const [activeView, setActiveView] = useState("overview");
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState([]);
-  const [runs, setRuns] = useState(initialRuns);
-  const [toolSearch, setToolSearch] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [toast, setToast] = useState("");
-  const [runCount, setRunCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState("");
+  const [selectedTools, setSelectedTools] = useState([]);
+  const [selectedSkills, setSelectedSkills] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [model, setModel] = useState("Modelo padrão");
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const fileInput = useRef(null);
 
-  const copy = pageCopy[activeView] || pageCopy.overview;
-  const filteredTools = useMemo(
-    () => tools.filter((tool) => `${tool.name} ${tool.category} ${tool.description}`.toLowerCase().includes(toolSearch.toLowerCase())),
-    [toolSearch],
-  );
-
-  const showToast = (message) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2800);
-  };
-
-  const sendPrompt = (event) => {
+  const startPrompt = (text) => setPrompt(text);
+  const sendMessage = (event) => {
     event?.preventDefault?.();
     const text = prompt.trim();
-    if (!text) return;
-    const userMessage = { id: `user-${Date.now()}`, role: "user", text };
-    const reply = {
-      id: `assistant-${Date.now() + 1}`,
+    if (!text && files.length === 0) return;
+    const userText = [text, files.length ? "Arquivos: " + files.map((file) => file.name).join(", ") : ""].filter(Boolean).join("\n");
+    setMessages((current) => [...current, { role: "user", text: userText }, {
       role: "assistant",
-      text: "Recebi sua ideia! Este protótipo ainda não chama um modelo de IA. Por enquanto, podemos validar a interface e o fluxo de trabalho; as integrações reais entram numa próxima etapa.",
-    };
-    setMessages((current) => [...current, userMessage, reply]);
+      text: "A interface do chat está pronta! 😄 Ainda falta conectar um modelo de IA para eu responder de verdade. As opções de ferramentas, habilidades e arquivos aqui já servem como base para essa próxima etapa."
+    }]);
     setPrompt("");
-    setActiveView("chat");
+    setFiles([]);
+    setMenuOpen(false);
+    setActivePanel("");
   };
-
-  const runTool = (tool) => {
-    setRunCount((current) => current + 1);
-    setRuns((current) => [{
-      id: `demo-${Date.now()}`,
-      title: tool.name,
-      detail: "Execução visual de demonstração; nenhuma ferramenta externa foi chamada",
-      status: "Simulada",
-      time: "Agora",
-    }, ...current].slice(0, 8));
-    showToast(`Demonstração de "${tool.name}" registrada.`);
-  };
-
-  const chooseView = (id) => {
-    setActiveView(id);
-    setSidebarOpen(false);
-  };
-
-  const openChatWithPrompt = (text) => {
-    setPrompt(text);
-    setActiveView("chat");
-  };
+  const toggle = (value, setter) => setter((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
 
   return (
-    <div className="app-shell">
-      {sidebarOpen && <button className="mobile-scrim" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu" />}
-      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
-        <a className="brand" href="#overview" onClick={(event) => { event.preventDefault(); chooseView("overview"); }}>
-          <span className="brand-symbol"><AudioLines size={20} strokeWidth={2.2} /></span>
-          <span className="brand-name">AGENT<span>---</span><small>LAB / PROTOTYPE</small></span>
-        </a>
-
-        <div className="workspace-switcher">
-          <div className="workspace-avatar">A</div>
-          <div className="workspace-label"><strong>Projeto principal</strong><span>Workspace local</span></div>
-          <ChevronDown size={15} className="switcher-chevron" />
+    <div className="chat-app">
+      <aside className={`chat-sidebar ${historyOpen ? "" : "sidebar-collapsed"}`}>
+        <div className="sidebar-brand-row">
+          <a className="chat-brand" href="#" onClick={(e) => { e.preventDefault(); setMessages([]); }}>
+            <span className="chat-brand-icon"><AudioLines size={19} /></span>
+            {historyOpen && <span>AGENT<span className="brand-dashes">---</span></span>}
+          </a>
+          <button className="chat-icon-button sidebar-toggle" title="Recolher histórico" onClick={() => setHistoryOpen(false)}><PanelLeft size={17} /></button>
         </div>
-
-        <div className="sidebar-label">WORKSPACE</div>
-        <nav className="nav-list" aria-label="Navegação principal">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} className={`nav-item ${activeView === item.id ? "active" : ""}`} onClick={() => chooseView(item.id)} type="button">
-                <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>
-                {item.id === "runs" && <span className="nav-count">{runCount}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-label provider-label">PROVEDORES <span className="soon-tag">EM BREVE</span></div>
-        <div className="provider-list">
-          {providers.map((provider) => (
-            <div key={provider.name} className="provider-row">
-              <ProviderMark provider={provider} />
-              <span className="provider-name">{provider.name}</span>
-              <span className="offline-indicator" title={provider.status} />
-            </div>
-          ))}
-        </div>
-
-        <div className="sidebar-spacer" />
-        <div className="prototype-card">
-          <div className="prototype-card-icon"><Zap size={15} /></div>
-          <div><strong>Modo protótipo</strong><p>As ferramentas estão simuladas.</p></div>
-          <span className="status-pip" />
-        </div>
-        <button className={`nav-item settings-link ${activeView === "settings" ? "active" : ""}`} onClick={() => chooseView("settings")} type="button">
-          <Settings2 size={17} /><span>Configurações</span>
-        </button>
-        <div className="sidebar-footer"><span className="online-dot" /> Interface v0.1.0 <span>·</span> <a href="https://github.com/wsl04012011w-cyber/AGENT---" target="_blank" rel="noreferrer">GitHub <ArrowUpRight size={11} /></a></div>
+        <button className="new-chat-button" onClick={() => { setMessages([]); setPrompt(""); }}><Plus size={17} />{historyOpen && "Novo chat"}</button>
+        {historyOpen && <>
+          <div className="history-label"><History size={13} /> Recentes</div>
+          {messages.length > 0 ? <button className="history-item active"><MessageSquare size={15} /><span>{messages.find((m) => m.role === "user")?.text.slice(0, 28) || "Conversa nova"}</span></button> : <div className="history-empty">Suas conversas vão aparecer aqui.</div>}
+          <div className="sidebar-bottom"><button className="sidebar-setting" onClick={() => setActivePanel(activePanel === "settings" ? "" : "settings")}><Settings2 size={16} /> Configurações</button><div className="sidebar-version">AGENT--- · Protótipo</div></div>
+        </>}
       </aside>
 
-      <main className="main-area">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu" type="button"><Menu size={19} /></button>
-            <div className="breadcrumb"><span>AGENT---</span><span className="breadcrumb-slash">/</span><strong>{navigation.find((item) => item.id === activeView)?.label || (activeView === "settings" ? "Configurações" : "Workspace")}</strong></div>
+      <main className="chat-main">
+        <header className="chat-header">
+          <div className="header-left">
+            {!historyOpen && <button className="chat-icon-button" title="Mostrar histórico" onClick={() => setHistoryOpen(true)}><PanelLeft size={18} /></button>}
+            <span className="header-product">AGENT---</span>
+            <span className="header-divider">/</span>
+            <div className="model-selector-wrap">
+              <button className="model-selector" onClick={() => setModelMenuOpen(!modelMenuOpen)}>{model}<ChevronDown size={14} /></button>
+              {modelMenuOpen && <div className="model-dropdown">{["Modelo padrão", "Modelo rápido", "Modelo avançado"].map((item) => <button key={item} onClick={() => { setModel(item); setModelMenuOpen(false); }}>{item}{model === item && <Check size={14} />}</button>)}<p>Modelos ilustrativos; nenhum provedor conectado.</p></div>}
+            </div>
           </div>
-          <div className="topbar-right">
-            <span className="environment-badge"><span className="tiny-dot" /> Protótipo local</span>
-            <button className="icon-button" aria-label="Notificações (demo)" onClick={() => showToast("Nenhuma notificação no protótipo.")} type="button"><Bell size={17} /></button>
-            <span className="user-avatar" title="Perfil local">W</span>
-          </div>
+          <div className="prototype-indicator"><span /> Modo protótipo</div>
         </header>
 
-        <div className="page-content">
-          <section className="page-intro">
-            <div><span className="eyebrow">{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div>
-            <button className="outline-button" onClick={() => showToast("Projeto em modo de demonstração.")} type="button"><Github size={15} /> <span>Projeto</span><ArrowUpRight size={13} /></button>
-          </section>
+        <section className={`conversation-area ${messages.length ? "has-messages" : ""}`}>
+          {messages.length === 0 ? <div className="welcome">
+            <div className="welcome-mark"><Sparkles size={23} /></div>
+            <h1>O que vamos fazer hoje?</h1>
+            <p>Uma ideia, uma dúvida ou um projeto inteiro. Manda aí. ✨</p>
+            <div className="starter-grid">{starterPrompts.map(({ icon: Icon, label, text }) => <button className="starter-card" key={label} onClick={() => startPrompt(text)}><Icon size={17} /><span>{label}</span><span className="starter-arrow">↗</span></button>)}</div>
+          </div> : <div className="messages-list">{messages.map((message, index) => <div className={`chat-message ${message.role}`} key={index}>{message.role === "assistant" && <span className="assistant-avatar"><AudioLines size={15} /></span>}<div className="message-content"><div className="message-label">{message.role === "user" ? "Você" : "AGENT---"}</div><p>{message.text}</p></div></div>)}</div>}
+        </section>
 
-          {activeView === "overview" && (
-            <>
-              <section className="hero-panel">
-                <div className="hero-grid-lines" />
-                <div className="hero-content">
-                  <div className="hero-kicker"><Sparkles size={13} /> SEU ESPAÇO DE EXPERIMENTAÇÃO</div>
-                  <h2>Da ideia ao <span>agente.</span><br />Um passo de cada vez.</h2>
-                  <p>Planeje tarefas, explore ferramentas e construa a base do seu agente — começando pelo essencial.</p>
-                  <button className="primary-button" onClick={() => chooseView("chat")} type="button">Abrir workspace <ArrowRight size={16} /></button>
-                </div>
-                <div className="hero-visual" aria-hidden="true">
-                  <div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="orbit orbit-three" />
-                  <div className="hero-core"><AudioLines size={36} strokeWidth={1.6} /></div>
-                  <div className="orbit-node node-one"><BrainCircuit size={17} /></div>
-                  <div className="orbit-node node-two"><Code2 size={17} /></div>
-                  <div className="orbit-node node-three"><Zap size={16} /></div>
-                  <div className="orbit-node node-four"><Layers3 size={17} /></div>
-                </div>
-                <div className="hero-index">SYS / 0001</div>
-              </section>
-
-              <section className="stats-grid" aria-label="Resumo do projeto">
-                <div className="stat-card"><span className="stat-icon lavender"><Layers3 size={17} /></span><div><span className="stat-label">Ferramentas mapeadas</span><strong>{tools.length.toString().padStart(2, "0")}</strong></div><span className="stat-foot">Catálogo inicial</span></div>
-                <div className="stat-card"><span className="stat-icon mint"><Cpu size={17} /></span><div><span className="stat-label">Provedores previstos</span><strong>04</strong></div><span className="stat-foot">Ainda desconectados</span></div>
-                <div className="stat-card"><span className="stat-icon peach"><ActivityIcon /></span><div><span className="stat-label">Demos executadas</span><strong>{runCount.toString().padStart(2, "0")}</strong></div><span className="stat-foot">Nesta sessão</span></div>
-              </section>
-
-              <div className="dashboard-grid">
-                <section className="panel task-panel">
-                  <SectionHeading eyebrow="COMECE POR AQUI" title="O que vamos fazer?" action={<span className="step-count">01 / 03</span>} />
-                  <ChatComposer value={prompt} onChange={setPrompt} onSubmit={sendPrompt} compact />
-                  <div className="quick-prompts">
-                    {samplePrompts.map((item, index) => <button key={item} onClick={() => openChatWithPrompt(item)} type="button"><span className="prompt-index">0{index + 1}</span>{item}<ArrowUpRight size={13} /></button>)}
-                  </div>
-                </section>
-
-                <section className="panel providers-panel">
-                  <SectionHeading eyebrow="CAMADA DE MODELOS" title="Provedores previstos" action={<span className="panel-counter">04</span>} />
-                  <div className="providers-grid">
-                    {providers.map((provider) => <div className="provider-card" key={provider.name}><ProviderMark provider={provider} /><div><strong>{provider.name}</strong><span><i /> Não conectado</span></div><MoreHorizontal size={16} /></div>)}
-                  </div>
-                  <div className="panel-footnote"><span className="tiny-dot" /> As conexões serão definidas numa próxima etapa.</div>
-                </section>
+        <div className="composer-zone">
+          {(selectedTools.length > 0 || selectedSkills.length > 0 || files.length > 0) && <div className="selection-chips">{selectedTools.map((item) => <span className="selection-chip" key={item}><Wrench size={12} />{item}<button onClick={() => toggle(item, setSelectedTools)}><X size={12} /></button></span>)}{selectedSkills.map((item) => <span className="selection-chip skill-chip" key={item}><Sparkles size={12} />{item}<button onClick={() => toggle(item, setSelectedSkills)}><X size={12} /></button></span>)}{files.map((file, i) => <span className="selection-chip file-chip" key={file.name + i}><Paperclip size={12} />{file.name}<button onClick={() => setFiles((current) => current.filter((_, j) => j !== i))}><X size={12} /></button></span>)}</div>}
+          {activePanel && <div className="attachment-panel">
+            <div className="attachment-panel-header"><div><strong>{activePanel === "tools" ? "Ferramentas" : activePanel === "skills" ? "Habilidades" : "Configurações"}</strong><p>{activePanel === "tools" ? "Escolha o que quer usar neste chat." : activePanel === "skills" ? "Adicione uma habilidade ao contexto." : "Preferências desta interface."}</p></div><button className="chat-icon-button" onClick={() => setActivePanel("")}><X size={16} /></button></div>
+            {(activePanel === "tools" ? toolOptions : activePanel === "skills" ? skillOptions : [{icon: Settings2,title:"Modo de demonstração",detail:"As respostas ainda são simuladas"}]).map(({ icon: Icon, title, detail }) => {
+              const list = activePanel === "tools" ? selectedTools : selectedSkills;
+              const setter = activePanel === "tools" ? setSelectedTools : setSelectedSkills;
+              return <button className="attachment-option" key={title} onClick={() => activePanel !== "settings" && toggle(title, setter)}><span className="attachment-option-icon"><Icon size={17} /></span><span className="attachment-option-copy"><strong>{title}</strong><small>{detail}</small></span>{activePanel === "settings" ? <span className="option-muted">Ativo</span> : list.includes(title) ? <Check size={16} className="option-check" /> : <Plus size={16} className="option-plus" />}</button>;
+            })}
+          </div>}
+          {menuOpen && <div className="plus-menu">
+            <button onClick={() => { fileInput.current?.click(); setMenuOpen(false); }}><span className="plus-menu-icon"><Paperclip size={17} /></span><span><strong>Adicionar arquivos</strong><small>PDF, imagens e outros documentos</small></span></button>
+            <button onClick={() => { setActivePanel(activePanel === "tools" ? "" : "tools"); setMenuOpen(false); }}><span className="plus-menu-icon"><Wrench size={17} /></span><span><strong>Ferramentas</strong><small>Pesquisa, código e arquivos</small></span></button>
+            <button onClick={() => { setActivePanel(activePanel === "skills" ? "" : "skills"); setMenuOpen(false); }}><span className="plus-menu-icon"><Sparkles size={17} /></span><span><strong>Habilidades</strong><small>Planejamento, escrita e análise</small></span></button>
+            <button onClick={() => { setModelMenuOpen(true); setMenuOpen(false); }}><span className="plus-menu-icon"><BrainCircuit size={17} /></span><span><strong>Escolher modelo</strong><small>Opções demonstrativas</small></span></button>
+          </div>}
+          <form className="chat-composer" onSubmit={sendMessage}>
+            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} placeholder="Pergunte alguma coisa..." rows={2} aria-label="Escreva sua mensagem" />
+            <div className="composer-toolbar">
+              <div className="composer-left-actions">
+                <button className={`plus-button ${menuOpen ? "plus-active" : ""}`} type="button" aria-label="Abrir menu de anexos e ferramentas" onClick={() => { setMenuOpen(!menuOpen); setActivePanel(""); }}><Plus size={20} /></button>
+                <button className="composer-tool-button" type="button" onClick={() => { setActivePanel(activePanel === "tools" ? "" : "tools"); setMenuOpen(false); }}><Wrench size={14} /><span>Ferramentas</span></button>
+                <button className="composer-tool-button" type="button" onClick={() => { setActivePanel(activePanel === "skills" ? "" : "skills"); setMenuOpen(false); }}><Sparkles size={14} /><span>Habilidades</span></button>
               </div>
-
-              <section className="tools-section">
-                <SectionHeading eyebrow="CAPACIDADES DO SISTEMA" title="Caixa de ferramentas" action={<button className="text-action view-all" onClick={() => chooseView("tools")} type="button">Ver todas <ArrowRight size={14} /></button>} />
-                <div className="tools-grid">
-                  {tools.slice(0, 3).map((tool) => <ToolCard key={tool.id} tool={tool} onRun={runTool} compact />)}
-                </div>
-              </section>
-            </>
-          )}
-
-          {activeView === "chat" && (
-            <section className="chat-workspace panel">
-              <div className="chat-topline"><div><span className="live-indicator" /> <strong>Workspace de tarefas</strong><span className="chat-model-label">Sem modelo conectado</span></div><button className="icon-button" onClick={() => setMessages([])} type="button" aria-label="Limpar conversa"><Plus size={17} /></button></div>
-              <div className="chat-scroll">
-                {messages.length === 0 ? <EmptyChat onPrompt={openChatWithPrompt} /> : (
-                  <div className="message-list">
-                    {messages.map((message) => <div className={`message-row ${message.role}`} key={message.id}><div className={`message-avatar ${message.role}`}>{message.role === "user" ? "W" : <AudioLines size={17} />}</div><div className="message-body"><span className="message-author">{message.role === "user" ? "Você" : "AGENT--- · Demo"}</span><p>{message.text}</p></div></div>)}
-                  </div>
-                )}
-              </div>
-              <div className="chat-compose-wrap"><ChatComposer value={prompt} onChange={setPrompt} onSubmit={sendPrompt} /><p className="disclaimer">As respostas são demonstrativas. Nenhum conteúdo é enviado a um provedor externo.</p></div>
-            </section>
-          )}
-
-          {activeView === "tools" && (
-            <section className="panel tools-library">
-              <div className="library-toolbar"><div className="search-field"><Search size={16} /><input value={toolSearch} onChange={(event) => setToolSearch(event.target.value)} placeholder="Buscar ferramentas..." aria-label="Buscar ferramentas" /></div><span className="result-count">{filteredTools.length} ferramentas</span></div>
-              {filteredTools.length ? <div className="tools-grid full-tools-grid">{filteredTools.map((tool) => <ToolCard key={tool.id} tool={tool} onRun={runTool} />)}</div> : <div className="no-results">Nenhuma ferramenta corresponde à busca.</div>}
-              <div className="notice"><CircleHelp size={16} /> Estes cartões representam capacidades planejadas. O botão de demonstração registra apenas uma atividade local.</div>
-            </section>
-          )}
-
-          {activeView === "runs" && (
-            <section className="panel runs-panel">
-              <SectionHeading eyebrow="LOG LOCAL" title="Atividade recente" action={<span className="pill muted">{runs.length} registros</span>} />
-              <div className="runs-list">{runs.map((run) => <div key={run.id} className="run-row"><span className="run-icon"><Check size={16} /></span><div className="run-copy"><strong>{run.title}</strong><p>{run.detail}</p></div><span className="run-status">{run.status}</span><span className="run-time">{run.time}</span></div>)}</div>
-              <p className="disclaimer">Este histórico existe somente na memória da página e será reiniciado ao recarregar.</p>
-            </section>
-          )}
-
-          {activeView === "architecture" && <ArchitectureView />}
-
-          {activeView === "settings" && (
-            <div className="settings-layout">
-              <section className="panel settings-panel"><SectionHeading eyebrow="CONFIGURAÇÃO" title="Ambiente do projeto" /><div className="setting-row"><div><strong>Modo de demonstração</strong><p>Interações locais, sem chamadas externas.</p></div><span className="setting-status enabled"><Check size={13} /> Ativo</span></div><div className="setting-row"><div><strong>Provedores de IA</strong><p>ChatGPT, Claude, Kimi e Groq ainda não foram conectados.</p></div><span className="setting-status">Pendente</span></div><div className="setting-row"><div><strong>Inferência Qwen 27B</strong><p>Endpoint e hospedagem serão definidos depois.</p></div><span className="setting-status">Pendente</span></div><div className="setting-row"><div><strong>Ferramentas externas</strong><p>Busca, acesso a arquivos e execução são demonstrações visuais.</p></div><span className="setting-status">Pendente</span></div></section>
-              <aside className="panel safety-panel"><span className="safety-icon"><ShieldCheckIcon /></span><h3>Uma nota sobre segurança</h3><p>Não coloque tokens, senhas ou chaves de API no código React. Quando chegar a hora das integrações, os segredos devem ficar no servidor e nas variáveis de ambiente apropriadas.</p><a href="https://vercel.com/docs" target="_blank" rel="noreferrer">Documentação da Vercel <ArrowUpRight size={13} /></a></aside>
+              <div className="composer-right-actions"><span className="enter-hint">Enter para enviar</span><button className="mic-button" type="button" title="Entrada de voz ainda não disponível"><Mic size={17} /></button><button className="send-message-button" type="submit" disabled={!prompt.trim() && files.length === 0} aria-label="Enviar mensagem"><Send size={16} /></button></div>
             </div>
-          )}
-          <footer className="page-footer"><span>AGENT--- <span className="footer-divider">/</span> Construído do zero, com calma.</span><span><i /> DEMO MODE <span className="footer-divider">·</span> SEM API CONECTADA</span></footer>
+          </form>
+          <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={(e) => { setFiles((current) => [...current, ...Array.from(e.target.files || [])]); e.target.value = ""; }} />
+          <p className="composer-disclaimer">AGENT--- ainda está em protótipo. As respostas não usam um modelo de IA real.</p>
         </div>
       </main>
-      {toast && <div className="toast" role="status"><Check size={16} />{toast}<button onClick={() => setToast("")} type="button" aria-label="Fechar aviso"><X size={14} /></button></div>}
     </div>
   );
-}
-
-function ActivityIcon() {
-  return <Zap size={17} />;
-}
-
-function ShieldCheckIcon() {
-  return <Check size={20} />;
 }
