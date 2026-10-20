@@ -163,20 +163,46 @@ export default function App() {
     };
 
     try {
-      const response = await fetch(`${config.url}/chat/completions`, {
-        method: "POST",
-        headers: {
-          // Keep the same CORS-compatible headers as the working API test.
-          "Authorization": `Bearer ${config.key}`,
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: text }],
-          stream: true,
-        }),
-      });
+      const requestUrl = `${config.url}/chat/completions`;
+      const requestHeaders = {
+        // Match the headers used by the working API test to avoid extra CORS preflight requirements.
+        "Authorization": `Bearer ${config.key}`,
+        "Content-Type": "application/json",
+      };
+
+      let response;
+      let streamRequestFailed = false;
+
+      try {
+        response = await fetch(requestUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          cache: "no-store",
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: text }],
+            stream: true,
+          }),
+        });
+      } catch (streamError) {
+        // Some API gateways/tunnels reject the streaming response at the browser layer.
+        // Retry once without streaming so chat still works when ordinary chat requests do.
+        streamRequestFailed = true;
+        response = await fetch(requestUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          cache: "no-store",
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: text }],
+            stream: false,
+          }),
+        });
+      }
+
+      if (streamRequestFailed) {
+        streamNotice = "O pedido em streaming falhou no navegador; resposta obtida pelo modo normal. Verifique CORS/Cloudflare para habilitar streaming.";
+      }
 
       const contentType = response.headers.get("content-type") || "não informado";
 
@@ -225,7 +251,9 @@ export default function App() {
       // Alguns gateways ignoram stream:true e devolvem JSON completo.
       // Fazemos fallback para a resposta final em vez de mostrar "(Sem resposta)".
       if (!sawSsePayload) {
-        streamNotice = "O gateway devolveu JSON completo em vez de eventos SSE; esta resposta não pôde ser exibida token por token.";
+        if (!streamNotice) {
+          streamNotice = "O gateway devolveu JSON completo em vez de eventos SSE; esta resposta não pôde ser exibida token por token.";
+        }
         let payload;
         try {
           payload = JSON.parse(rawResponse.trim());
