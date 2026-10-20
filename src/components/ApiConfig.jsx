@@ -178,6 +178,14 @@ export default function ApiConfig({ onConfigSave, onClose }) {
     setTestMessage("Enviando mensagem de teste...");
 
     try {
+      let testModel = "auto";
+      if (provider === "xkiro") {
+        const modelsResponse = await fetch(`${finalUrl}/models`);
+        if (!modelsResponse.ok) throw new Error("Não foi possível carregar os modelos xKiro.");
+        const modelsData = await modelsResponse.json();
+        testModel = modelsData.data?.[0]?.id;
+        if (!testModel) throw new Error("A xKiro não retornou modelos disponíveis.");
+      }
       const response = await fetch(`${finalUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -185,7 +193,7 @@ export default function ApiConfig({ onConfigSave, onClose }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: provider === "xkiro" ? "openai/gpt-5.6-sol" : "auto",
+          model: testModel,
           messages: [
             { role: "user", content: "Responda apenas: OK" }
           ],
