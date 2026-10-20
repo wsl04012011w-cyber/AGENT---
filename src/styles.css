@@ -510,7 +510,7 @@ html, body {
 
 /* Thinking dentro da mensagem */
 .msg-thinking {
-  margin-bottom: 10px;
+  margin-bottom:  2px;
   background: var(--bg);
   border-radius: 8px;
   border: 1px solid var(--line2);
@@ -930,7 +930,7 @@ html, body {
 
 /* Pensamento colapsado */
 .msg-thinking {
-  margin-bottom: 10px;
+  margin-bottom:  2px;
   background: var(--bg);
   border-radius: 8px;
   border: 1px solid var(--line2);
@@ -974,26 +974,28 @@ html, body {
   overflow-y: auto;
 }
 
-/* Fix gap - esconder thinking quando vazio */
-.chat-message:has(.thinking-content-msg:empty) {
-  display: none !important;
+
+
+/* Pensamento fica no mesmo balão da resposta durante o stream. */
+.streaming-thinking {
+  margin: 0;
+  padding: 0 0 2px;
 }
 
-/* Ou forçar altura mínima */
-.thinking-content-msg {
-  margin-bottom: 0 !important;
+.streaming-thinking-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
-/* Remover margem extra quando thinking some */
-.messages-list > *:last-child {
-  margin-bottom: 0 !important;
+.streaming-thinking .thinking-preview {
+  margin: 0;
+  line-height: 1.35;
 }
 
-/* Gap zero entre mensagens */
-.chat-message {
-  margin-bottom: 8px !important;
-}
-
-.chat-message:last-of-type {
-  margin-bottom: 0 !important;
+.msg-thinking {
+  margin-bottom: 2px;
 }
