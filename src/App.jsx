@@ -59,6 +59,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [model, setModel] = useState("auto");
+  const [xkiroModels, setXkiroModels] = useState([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -77,6 +78,32 @@ export default function App() {
     document.addEventListener('fullscreenchange', fn);
     return () => document.removeEventListener('fullscreenchange', fn);
   }, []);
+
+  useEffect(() => {
+    if (config.provider !== "xkiro" || !config.key || !config.url) {
+      setXkiroModels([]);
+      if (config.provider !== "xkiro") setModel("auto");
+      return;
+    }
+    let cancelled = false;
+    fetch(`${config.url}/models`, {
+      headers: { Authorization: `Bearer ${config.key}` },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const ids = (data.data || []).map((item) => item.id).filter(Boolean);
+        setXkiroModels(ids);
+        if (ids.length && !ids.includes(model)) setModel(ids[0]);
+      })
+      .catch(() => {
+        if (!cancelled) setXkiroModels([]);
+      });
+    return () => { cancelled = true; };
+  }, [config.provider, config.url, config.key]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -381,7 +408,10 @@ export default function App() {
               </button>
               {modelMenuOpen && (
                 <div className="model-dropdown">
-                  {["auto", "auto:fast", "auto:smart", "fusion"].map(m => (
+                  {config.provider === "xkiro" && xkiroModels.length === 0 && (
+                    <button disabled>Carregando modelos…</button>
+                  )}
+                  {(config.provider === "xkiro" ? xkiroModels : ["auto", "auto:fast", "auto:smart", "fusion"]).map(m => (
                     <button key={m} onClick={() => { setModel(m); setModelMenuOpen(false); }}>
                       {m}{model === m && <Check size={14} />}
                     </button>
