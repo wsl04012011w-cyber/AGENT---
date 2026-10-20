@@ -107,6 +107,7 @@ export default function App() {
     let rawResponse = "";
     let buffer = "";
     let sawSsePayload = false;
+    let streamNotice = "";
 
     const updateStreamingMessage = () => {
       const currentTokens = usage?.total_tokens || Math.ceil((text.length + fullText.length) / 4);
@@ -225,6 +226,7 @@ export default function App() {
       // Alguns gateways ignoram stream:true e devolvem JSON completo.
       // Fazemos fallback para a resposta final em vez de mostrar "(Sem resposta)".
       if (!sawSsePayload) {
+        streamNotice = "O gateway devolveu JSON completo em vez de eventos SSE; esta resposta não pôde ser exibida token por token.";
         let payload;
         try {
           payload = JSON.parse(rawResponse.trim());
@@ -236,6 +238,9 @@ export default function App() {
           );
         }
         applyPayload(payload);
+      } else if (!contentType.toLowerCase().includes("text/event-stream")) {
+        streamNotice =
+          `O servidor enviou eventos, mas Content-Type é "${contentType}". O Cloudflare Tunnel pode bufferizar a resposta; o FreeLLMAPI deve responder com Content-Type: text/event-stream.`;
       }
 
       if (!fullText && !fullThinking) {
@@ -256,6 +261,7 @@ export default function App() {
               text: fullText || "(Sem resposta)",
               thinking: fullThinking,
               tokens: finalTokens,
+              streamNotice,
             };
             break;
           }
@@ -415,6 +421,10 @@ export default function App() {
                       <p className={msg.streaming ? "streaming-text" : ""}>
                         {msg.text || " "}
                       </p>
+                    )}
+
+                    {msg.streamNotice && (
+                      <p className="stream-warning">⚠️ {msg.streamNotice}</p>
                     )}
                   </div>
                 </div>
