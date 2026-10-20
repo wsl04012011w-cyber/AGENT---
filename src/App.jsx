@@ -166,10 +166,9 @@ export default function App() {
       const response = await fetch(`${config.url}/chat/completions`, {
         method: "POST",
         headers: {
+          // Keep the same CORS-compatible headers as the working API test.
           "Authorization": `Bearer ${config.key}`,
           "Content-Type": "application/json",
-          "Accept": "text/event-stream, application/json",
-          "Cache-Control": "no-cache",
         },
         cache: "no-store",
         body: JSON.stringify({
