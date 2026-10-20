@@ -510,7 +510,7 @@ html, body {
 
 /* Thinking dentro da mensagem */
 .msg-thinking {
-  margin-bottom:  2px;
+  margin-bottom: 2px;
   background: var(--bg);
   border-radius: 8px;
   border: 1px solid var(--line2);
@@ -930,7 +930,7 @@ html, body {
 
 /* Pensamento colapsado */
 .msg-thinking {
-  margin-bottom:  2px;
+  margin-bottom: 2px;
   background: var(--bg);
   border-radius: 8px;
   border: 1px solid var(--line2);
@@ -998,4 +998,12 @@ html, body {
 
 .msg-thinking {
   margin-bottom: 2px;
+}
+
+
+.stream-warning {
+  margin-top: 7px !important;
+  color: #fbbf24 !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
 }
