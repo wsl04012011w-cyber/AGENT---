@@ -27,6 +27,7 @@ const URL_PRESETS = [
     icon: Globe,
     description: "URL personalizada"
   },
+  { id: "xkiro", label: "xKiro", url: "https://api.xkiro.com", icon: Globe, description: "API compatível com OpenAI" },
 ];
 
 // ============================================================
@@ -65,10 +66,11 @@ function getBaseUrl(url) {
 }
 
 export default function ApiConfig({ onConfigSave, onClose }) {
+  const [provider, setProvider] = useState(() => localStorage.getItem("api_provider") || "freellmapi");
   const [urlPreset, setUrlPreset] = useState(() => {
     const saved = localStorage.getItem("freellmapi_url") || "";
     const savedPreset = localStorage.getItem("freellmapi_preset") || "";
-
+    if (localStorage.getItem("api_provider") === "xkiro") return "xkiro";
     if (savedPreset) return savedPreset;
     if (saved.includes("localhost")) return "local";
     if (saved.includes("trycloudflare") || saved.includes("cfargotunnel") || saved.includes("cloudflare")) return "tunnel";
@@ -77,13 +79,13 @@ export default function ApiConfig({ onConfigSave, onClose }) {
   });
 
   const [apiUrl, setApiUrl] = useState(() => {
-    const saved = localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1";
-    return getBaseUrl(saved); // Mostra sem o /v1
+    const p = localStorage.getItem("api_provider") || "freellmapi";
+    return getBaseUrl(p === "xkiro" ? (localStorage.getItem("xkiro_url") || "https://api.xkiro.com/v1") : (localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1"));
   });
-
-  const [apiKey, setApiKey] = useState(() => 
-    localStorage.getItem("freellmapi_key") || ""
-  );
+  const [apiKey, setApiKey] = useState(() => {
+    const p = localStorage.getItem("api_provider") || "freellmapi";
+    return localStorage.getItem(p === "xkiro" ? "xkiro_key" : "freellmapi_key") || "";
+  });
   const [testStatus, setTestStatus] = useState("idle");
   const [testMessage, setTestMessage] = useState("");
   const [saved, setSaved] = useState(false);
@@ -95,14 +97,17 @@ export default function ApiConfig({ onConfigSave, onClose }) {
   const handlePresetChange = (presetId) => {
     setUrlPreset(presetId);
 
-    if (presetId === "local") {
-      setApiUrl("http://localhost:3001");
-    } else if (presetId === "tunnel" || presetId === "custom") {
-      const saved = localStorage.getItem("freellmapi_url");
-      if (saved && !saved.includes("localhost")) {
-        setApiUrl(getBaseUrl(saved));
-      } else {
-        setApiUrl("");
+    if (presetId === "xkiro") {
+      setProvider("xkiro");
+      setApiUrl(getBaseUrl(localStorage.getItem("xkiro_url") || "https://api.xkiro.com/v1"));
+      setApiKey(localStorage.getItem("xkiro_key") || "");
+    } else {
+      setProvider("freellmapi");
+      setApiKey(localStorage.getItem("freellmapi_key") || "");
+      if (presetId === "local") setApiUrl("http://localhost:3001");
+      else {
+        const saved = localStorage.getItem("freellmapi_url");
+        setApiUrl(saved && !saved.includes("localhost") ? getBaseUrl(saved) : "");
       }
     }
   };
@@ -114,12 +119,18 @@ export default function ApiConfig({ onConfigSave, onClose }) {
 
   const handleSave = () => {
     const normalized = normalizeApiUrl(apiUrl);
-    localStorage.setItem("freellmapi_url", normalized);
-    localStorage.setItem("freellmapi_key", apiKey);
-    localStorage.setItem("freellmapi_preset", urlPreset);
+    localStorage.setItem("api_provider", provider);
+    if (provider === "xkiro" || urlPreset === "xkiro") {
+      localStorage.setItem("xkiro_url", normalized);
+      localStorage.setItem("xkiro_key", apiKey);
+    } else {
+      localStorage.setItem("freellmapi_url", normalized);
+      localStorage.setItem("freellmapi_key", apiKey);
+      localStorage.setItem("freellmapi_preset", urlPreset);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    onConfigSave?.({ url: normalized, key: apiKey, preset: urlPreset });
+    onConfigSave?.({ url: normalized, key: apiKey, preset: urlPreset, provider });
   };
 
   const testConnection = async () => {
@@ -174,7 +185,7 @@ export default function ApiConfig({ onConfigSave, onClose }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "auto",
+          model: provider === "xkiro" ? "openai/gpt-5.6-sol" : "auto",
           messages: [
             { role: "user", content: "Responda apenas: OK" }
           ],
@@ -204,7 +215,7 @@ export default function ApiConfig({ onConfigSave, onClose }) {
       <div className="api-config-header">
         <div className="api-config-title">
           <Settings2 size={18} />
-          <h3>Configurar FreeLLMAPI</h3>
+          <h3>Configurar API</h3>
         </div>
         <button className="close-btn" onClick={onClose}>
           <X size={18} />
@@ -274,15 +285,15 @@ export default function ApiConfig({ onConfigSave, onClose }) {
         <div className="config-field">
           <label>
             <Key size={14} />
-            Unified API Key
+            {provider === "xkiro" ? "xKiro API Key" : "Unified API Key"}
           </label>
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="freellmapi-sua-chave-aqui"
+            placeholder={provider === "xkiro" ? "Sua chave xKiro (sk-xt-…)" : "freellmapi-sua-chave-aqui"}
           />
-          <small>Encontrada no dashboard do FreeLLMAPI (aba Keys)</small>
+          <small>{provider === "xkiro" ? "Chave salva somente neste navegador; não a coloque no código." : "Encontrada no dashboard do FreeLLMAPI (aba Keys)"}</small>
         </div>
 
         {/* Status do teste */}
@@ -321,7 +332,7 @@ export default function ApiConfig({ onConfigSave, onClose }) {
         </div>
 
         {/* Info sobre túnel */}
-        {urlPreset === "tunnel" && (
+        {provider === "freellmapi" && urlPreset === "tunnel" && (
           <div className="config-info tunnel-info">
             <h4>🌐 Cloudflare Tunnel</h4>
             <p>Para expor seu FreeLLMAPI local:</p>
@@ -355,10 +366,12 @@ export default function ApiConfig({ onConfigSave, onClose }) {
 // Hook para usar a configuração
 export function useApiConfig() {
   const [config, setConfig] = useState(() => {
-    const savedUrl = localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1";
+    const provider = localStorage.getItem("api_provider") || "freellmapi";
+    const savedUrl = provider === "xkiro" ? localStorage.getItem("xkiro_url") || "https://api.xkiro.com/v1" : localStorage.getItem("freellmapi_url") || "http://localhost:3001/v1";
     return {
+      provider,
       url: normalizeApiUrl(savedUrl),
-      key: localStorage.getItem("freellmapi_key") || "",
+      key: localStorage.getItem(provider === "xkiro" ? "xkiro_key" : "freellmapi_key") || "",
       preset: localStorage.getItem("freellmapi_preset") || "local",
     };
   });
@@ -371,10 +384,14 @@ export function useApiConfig() {
       url: normalizeApiUrl(newConfig.url),
     };
     setConfig(normalized);
-    localStorage.setItem("freellmapi_url", normalized.url);
-    localStorage.setItem("freellmapi_key", normalized.key);
-    if (newConfig.preset) {
-      localStorage.setItem("freellmapi_preset", newConfig.preset);
+    localStorage.setItem("api_provider", normalized.provider || "freellmapi");
+    if (normalized.provider === "xkiro") {
+      localStorage.setItem("xkiro_url", normalized.url);
+      localStorage.setItem("xkiro_key", normalized.key);
+    } else {
+      localStorage.setItem("freellmapi_url", normalized.url);
+      localStorage.setItem("freellmapi_key", normalized.key);
+      if (newConfig.preset) localStorage.setItem("freellmapi_preset", newConfig.preset);
     }
   };
 
