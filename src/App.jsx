@@ -203,6 +203,7 @@ export default function App() {
         return updated;
       });
     } finally {
+      // Limpar thinking imediatamente pra não deixar gap
       setIsLoading(false);
       setIsThinking(false);
       setThinkingText("");
@@ -315,18 +316,18 @@ export default function App() {
                 </div>
               ))}
 
-              {/* Thinking indicator */}
-              {isThinking && thinkingText && (
-                <div className="chat-message assistant">
+              {/* Thinking indicator - só durante streaming ativo */}
+              {isThinking && thinkingText.length > 0 && (
+                <div className="chat-message assistant thinking-active-msg">
                   <span className="assistant-avatar"><Brain size={15} /></span>
-                  <div className="message-content thinking-content-msg">
+                  <div className="message-content">
                     <div className="message-label">
                       <span>Pensando</span>
                       <span className="thinking-dots-inline">
                         <span></span><span></span><span></span>
                       </span>
                     </div>
-                    <p className="thinking-preview">{thinkingText.slice(-150)}...</p>
+                    <p className="thinking-preview">{thinkingText.slice(-100)}</p>
                   </div>
                 </div>
               )}
