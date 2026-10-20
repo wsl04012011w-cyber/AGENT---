@@ -973,3 +973,27 @@ html, body {
   max-height: 150px;
   overflow-y: auto;
 }
+
+/* Fix gap - esconder thinking quando vazio */
+.chat-message:has(.thinking-content-msg:empty) {
+  display: none !important;
+}
+
+/* Ou forçar altura mínima */
+.thinking-content-msg {
+  margin-bottom: 0 !important;
+}
+
+/* Remover margem extra quando thinking some */
+.messages-list > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Gap zero entre mensagens */
+.chat-message {
+  margin-bottom: 8px !important;
+}
+
+.chat-message:last-of-type {
+  margin-bottom: 0 !important;
+}
